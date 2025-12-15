@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Java / Spring Boot
+target/
+*.jar
+
+# OS
+.DS_Store
+
+# Node (if any)
+node_modules/
+
+# Logs
+*.log
+
+# ML data
+data/
