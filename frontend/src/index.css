@@ -1,0 +1,23 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* styles.css */
+/*.background {
+  background-image: url('/Users/mahshidsmac/Desktop/third\ year\'s\ project/9cd76f6dd0a7229dbe53b39753ac8258.jpg'); /* path relative to public folder
+  background-size: cover;makes it cover the whole container 
+  background-position: center;
+  height: 100vh; /* full viewport height 
+  width: 100%;
+}
+*/
