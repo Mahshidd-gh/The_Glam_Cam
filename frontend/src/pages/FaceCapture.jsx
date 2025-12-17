@@ -33,7 +33,8 @@ function FaceCapture() {
         if (!res.ok) throw new Error("Request failed");
 
         const data = await res.json(); // ✅ parse JSON from FastAPI
-        setPrediction(`Face shape: ${data.face_shape} (Confidence: ${data.confidence})`);
+        setPrediction(`Face shape: ${data.class} (Confidence: ${data.confidence})`);
+        console.log("Prediction result:", data);
       } catch (err) {
         console.error("Error sending snapshot:", err);
         setPrediction("Error detecting face shape.");
