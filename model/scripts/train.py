@@ -8,7 +8,7 @@ import json
 DATA_DIR = "../data"
 IMG_SIZE = (224, 224)
 BATCH = 32
-EPOCHS = 1
+EPOCHS = 15
 NUM_CLASSES = None
 
 # %%
