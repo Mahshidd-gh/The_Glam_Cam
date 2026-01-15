@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 function FaceCapture() {
   const videoRef = useRef(null);
-  const [prediction, setPrediction] = useState(""); // store result here
+  const [prediction, setPrediction] = useState(null); // store result here
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -33,7 +33,11 @@ function FaceCapture() {
         if (!res.ok) throw new Error("Request failed");
 
         const data = await res.json(); // ✅ parse JSON from FastAPI
-        setPrediction(`Face shape: ${data.class} (Confidence: ${data.confidence})`);
+        setPrediction({
+          face_shape: data.face_shape,
+          confidence: data.confidence
+        });
+
         console.log("Prediction result:", data);
       } catch (err) {
         console.error("Error sending snapshot:", err);
@@ -41,6 +45,10 @@ function FaceCapture() {
       }
     }, "image/jpeg");
   };
+
+  useEffect(() => {
+  console.log("Prediction state changed:", prediction);
+}, [prediction]);
 
   return (
     <div className="flex flex-col items-center">
@@ -53,7 +61,10 @@ function FaceCapture() {
       </button>
 
       {prediction && (
-        <p className="mt-4 text-lg font-semibold text-gray-800">{prediction}</p>
+        <p className="mt-4 text-lg font-semibold text-gray-800">
+             Face shape: {prediction.face_shape} <br />
+             Confidence: {(prediction.confidence * 100).toFixed(1)}%
+        </p>    
       )}
     </div>
   );
