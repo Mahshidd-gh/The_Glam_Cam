@@ -155,4 +155,7 @@ def predict(image_bytes: bytes):
         outputs = MODEL(image_tensor, geom_tensor)
         pred_idx = torch.argmax(outputs, dim=1).item()
 
-    return CLASS_NAMES[pred_idx]
+    return {
+        "class_name": CLASS_NAMES[pred_idx],
+        "confidence": float(torch.softmax(outputs, dim=1)[0][pred_idx])
+    }

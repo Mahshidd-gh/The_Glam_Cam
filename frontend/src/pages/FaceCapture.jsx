@@ -21,7 +21,7 @@ function FaceCapture() {
 
     canvas.toBlob(async (blob) => {
       const formData = new FormData();
-      formData.append("file", blob, "snapshot.jpg"); // ✅ "file" — matches FastAPI
+      formData.append("file", blob, "snapshot.jpg"); // "file", matches FastAPI
 
       try {
         // Spring Boot endpoint, which forwards to FastAPI
@@ -32,7 +32,7 @@ function FaceCapture() {
 
         if (!res.ok) throw new Error("Request failed");
 
-        const data = await res.json(); // ✅ parse JSON from FastAPI
+        const data = await res.json(); // parse JSON from FastAPI
         setPrediction({
           face_shape: data.face_shape,
           confidence: data.confidence
@@ -46,9 +46,7 @@ function FaceCapture() {
     }, "image/jpeg");
   };
 
-  useEffect(() => {
-  console.log("Prediction state changed:", prediction);
-}, [prediction]);
+ 
 
   return (
     <div className="flex flex-col items-center">
