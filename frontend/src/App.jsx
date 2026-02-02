@@ -9,10 +9,10 @@ function HomePage() {
   const navigate = useNavigate();
 
   return (
-    <div className="w-full h-full background">
+    <div className="w-full min-h-screen bg-pink-100">
       <header className="p-4 text-center backdrop-blur-md shadow-md">
         <h1 className="text-2xl font-bold text-white">
-          Welcome to Smart Mirror
+          The Glam Cam✨
         </h1>
       </header>
 
