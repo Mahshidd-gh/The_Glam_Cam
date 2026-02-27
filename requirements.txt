@@ -30,6 +30,7 @@ nest-asyncio==1.6.0
 networkx==3.6.1
 numpy==2.2.6
 opencv-python-headless==4.12.0.88
+psycopg2-binary==2.9.11
 packaging==25.0
 parso==0.8.5
 pexpect==4.9.0
