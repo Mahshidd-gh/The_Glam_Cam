@@ -1,33 +1,27 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation} from "react-router-dom";
 
 export default function LoadingPage() {
   const [countdown, setCountdown] = useState(5);
   const [finished, setFinished] = useState(false);
   const [fadeOut ,setFadeOut] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const tutorial = location.state?.tutorial;
 
   useEffect(() => {
     if (countdown === 0) {
-      // TODO: trigger backend face detection here
       console.log("Face detection started");
       setFinished(true);
-      // After the timer finishes:
-
-      // // start fade after 1.5s
-      // setTimeout(() => {
-      //   setFadeOut(true);
-      // }, 2000);
-
       setTimeout(()=>{
-       navigate("/");
+        navigate("/tutorial", {
+        state: { tutorial }
+      });
       }, 2000);
-    
-      return;
-    }
+}
 
     const timer = setTimeout(() => {
-      setCountdown(countdown - 1);
+      setCountdown(prev => prev - 1)
     }, 1000);
 
     return () => clearTimeout(timer);
@@ -55,14 +49,14 @@ export default function LoadingPage() {
       <div className="w-[360px] bg-white rounded-2xl shadow-xl p-6 text-center space-y-4"> 
       
 
-      {/* Instruction */}
+      {/* Instruction
       <h1 className="text-2xl font-semibold text-center mb-4">
         Please look at the mirror
       </h1>
 
       <p className="text-gray-400 text-sm mb-8">
         Position your face inside the frame
-      </p>
+      </p> */}
 
       {/* Circular Countdown */}
       <div className="flex-1 flex items-center justify-center">
@@ -98,7 +92,7 @@ export default function LoadingPage() {
 
       {/* Status */}
       <p className="text-sm text-gray-400 mt-6">
-        Detecting face shape…
+        Preparing your personalized tutorial...
       </p>
     </div>
     </div>

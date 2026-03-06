@@ -23,12 +23,12 @@ export default function HomePage() {
         </p>
 
         {/* Main buttons */}
-        <button
+        {/* <button
           onClick={() => navigate("/FaceCapture")}
           className="w-full py-3 rounded-xl bg-pink-500 text-white font-semibold hover:bg-purple-600 transition"
         >
           📷 Start your journey
-        </button>
+        </button> */}
 
         <button
           onClick={() => navigate("/MakeUpPreference")}
@@ -43,7 +43,7 @@ export default function HomePage() {
         <div className="flex justify-between gap-2 pt-2">
           <button
             onClick={() => navigate("/Settings")}
-            className="flex-1 py-2 rounded-lg bg-gray-100 text-sm hover:bg-gray-200"
+            className="flex-1 py-2 rounded-lg bg-pink-500 text-sm hover:bg-purple-600 transition"
           >
             ⚙️ Settings
           </button>
@@ -57,7 +57,7 @@ export default function HomePage() {
 
           <button
             onClick={() => navigate("/History")}
-            className="flex-1 py-2 rounded-lg bg-gray-100 text-sm hover:bg-gray-200"
+            className="flex-1 py-2 rounded-lg bg-pink-500 text-sm hover:bg-purple-600 transition"
           >
             🕘 History
           </button>

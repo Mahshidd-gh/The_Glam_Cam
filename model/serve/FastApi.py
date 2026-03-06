@@ -30,6 +30,8 @@ async def predict_face_shape(file: UploadFile = File(...)):
 @app.get("/get_tutorial")
 def get_tutorial(face_shape: str, makeup_style: str = None, hair_style: str = None):
     
+    print(face_shape, makeup_style, hair_style)
+
     steps = fetch_tutorial(
         face_shape=face_shape.lower(),
         makeup_style=makeup_style.lower(),
@@ -37,11 +39,14 @@ def get_tutorial(face_shape: str, makeup_style: str = None, hair_style: str = No
         random_choice=True
     )
 
+
+
     if steps:
         return {
             "face_shape": face_shape,
             "steps": steps,
             "total_steps": len(steps)
         }
+
     else:
         return {"message": "No tutorial found"}

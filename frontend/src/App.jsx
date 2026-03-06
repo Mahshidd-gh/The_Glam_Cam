@@ -6,6 +6,7 @@ import Settings from "./pages/Setting";
 import FaceCapture from "./pages/FaceCapture";
 import LoadingPage from "./pages/LoadingPage";
 import HomePage from "./pages/HomePage";
+import Tutorial from "./pages/tutorial";
 
 // App = Router + Routes
 function App() {
@@ -19,6 +20,7 @@ function App() {
         <Route path="/Settings" element={<Settings />} />
         <Route path="/FaceCapture" element={<FaceCapture />} />
         <Route path="/LoadingPage" element={<LoadingPage />} />
+        <Route path="/tutorial" element={<Tutorial />} />
       </Routes>
     </Router>
   );

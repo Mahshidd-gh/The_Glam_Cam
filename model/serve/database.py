@@ -11,7 +11,7 @@ def get_connection():
     )
 
 
-def fetch_tutorial(face_shape, makeup_style=None, hair_style=None, random_choice=True):
+def fetch_tutorial(face_shape, makeup_style, hair_style, random_choice=True):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -36,6 +36,7 @@ def fetch_tutorial(face_shape, makeup_style=None, hair_style=None, random_choice
         query += " ORDER BY RANDOM() LIMIT 1"
 
     cursor.execute(query, tuple(params))
+    print(query)
     result = cursor.fetchone()
 
     conn.close()

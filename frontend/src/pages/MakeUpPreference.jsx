@@ -26,6 +26,8 @@ export default function MakeUpPreference() {
     </button>
   );
 
+console.log (formData);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-6 space-y-6">
