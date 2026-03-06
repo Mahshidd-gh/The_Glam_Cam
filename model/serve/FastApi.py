@@ -1,8 +1,17 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from model.scripts.Face_recognition import predict
-from database import fetch_tutorial
+from model.serve.database import fetch_tutorial
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Face Shape Classification API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # allow all origins during development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/predict")
 async def predict_face_shape(file: UploadFile = File(...)):
@@ -22,16 +31,17 @@ async def predict_face_shape(file: UploadFile = File(...)):
 def get_tutorial(face_shape: str, makeup_style: str = None, hair_style: str = None):
     
     steps = fetch_tutorial(
-        face_shape=face_shape,
-        makeup_style=makeup_style,
-        hair_style=hair_style,
+        face_shape=face_shape.lower(),
+        makeup_style=makeup_style.lower(),
+        hair_style=hair_style.lower(),
         random_choice=True
     )
 
     if steps:
         return {
             "face_shape": face_shape,
-            "steps": steps
+            "steps": steps,
+            "total_steps": len(steps)
         }
     else:
         return {"message": "No tutorial found"}

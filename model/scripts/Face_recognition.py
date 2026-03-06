@@ -156,6 +156,6 @@ def predict(image_bytes: bytes):
         pred_idx = torch.argmax(outputs, dim=1).item()
 
     return {
-        "class_name": CLASS_NAMES[pred_idx],
+        "face_shape": CLASS_NAMES[pred_idx],
         "confidence": float(torch.softmax(outputs, dim=1)[0][pred_idx])
     }

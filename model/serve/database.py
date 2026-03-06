@@ -6,28 +6,30 @@ def get_connection():
     return psycopg2.connect(
         host="localhost",
         database="smart_mirror",
-        user="postgres",
-        password="your_password"
+        user="mahshidsmac",
+        password=""
     )
 
 
 def fetch_tutorial(face_shape, makeup_style=None, hair_style=None, random_choice=True):
+
     conn = get_connection()
     cursor = conn.cursor()
 
     query = """
-        SELECT tutorial, makeup_style
+        SELECT tutorial
         FROM makeup_tutorials
-        WHERE face_shape = %s
+        WHERE LOWER(face_shape) = LOWER(%s)
     """
+
     params = [face_shape]
 
     if makeup_style:
-        query += " AND makeup_style = %s"
+        query += " AND LOWER(makeup_style) = LOWER(%s)"
         params.append(makeup_style)
 
     if hair_style:
-        query += " AND hair_style = %s"
+        query += " AND LOWER(hair_style) = LOWER(%s)"
         params.append(hair_style)
 
     if random_choice:

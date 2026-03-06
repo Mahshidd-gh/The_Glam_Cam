@@ -1,18 +1,34 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
 
 function FaceCapture() {
   const videoRef = useRef(null);
-  const [prediction, setPrediction] = useState(null); // store result here
+  const navigate = useNavigate();
+  const location = useLocation();
+  const preferences = location.state;
+  const [prediction, setPrediction] = useState(null);
+  const [tutorial, setTutorial] = useState(null);
+  const [showResultScreen, setShowResultScreen] = useState(false);
 
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then((stream) => {
-        videoRef.current.srcObject = stream;
-      })
-      .catch((err) => console.error("Error accessing webcam:", err));
-  }, []);
+
+   useEffect(() => {
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then((stream) => {
+      videoRef.current.srcObject = stream;
+
+      // wait 2 seconds for camera to stabilise
+      setTimeout(() => {
+        captureAndSend();
+      }, 4000);
+
+    })
+    .catch((err) => console.error("Error accessing webcam:", err));
+}, []);
+
 
   const captureAndSend = () => {
+    if (!videoRef.current || videoRef.current.videoWidth === 0) return;
     const canvas = document.createElement("canvas");
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
@@ -21,49 +37,128 @@ function FaceCapture() {
 
     canvas.toBlob(async (blob) => {
       const formData = new FormData();
-      formData.append("file", blob, "snapshot.jpg"); // "file", matches FastAPI
+      formData.append("file", blob, "snapshot.jpg");
 
       try {
-        // Spring Boot endpoint, which forwards to FastAPI
         const res = await fetch("http://localhost:8080/face/predict", {
           method: "POST",
           body: formData,
         });
 
-        if (!res.ok) throw new Error("Request failed");
+        if (!res.ok) throw new Error("Prediction failed");
 
-        const data = await res.json(); // parse JSON from FastAPI
-        setPrediction({
-          face_shape: data.face_shape,
-          confidence: data.confidence
-        });
+        const data = await res.json();
+        console.log ("FULL respons:" , data);
+        setPrediction(data);
 
-        console.log("Prediction result:", data);
+        setPrediction(data);
+        setShowResultScreen(true);
+
+        // Fetch tutorial after prediction
+        const tutorialRes = await fetch(
+          `http://localhost:8000/get_tutorial?face_shape=${data.face_shape}&makeup_style=${preferences.makeupType}&hair_style=${preferences.hairstyle}`
+        );
+       
+      
+        const tutorialData = await tutorialRes.json();
+        setTutorial(tutorialData);
+
+        console.log("Tutorial:", tutorialData);
+
       } catch (err) {
-        console.error("Error sending snapshot:", err);
-        setPrediction("Error detecting face shape.");
+        console.error("Error:", err);
       }
     }, "image/jpeg");
   };
 
+
+ const startSession = () => {
+    if (!prediction || !tutorial) {
+      alert("Please detect your face shape first.");
+      return;
+    }
+
+    navigate("/LoadingPage", {
+      state: {
+        faceShape: prediction.face_shape,
+        preferences: preferences,
+        tutorial: tutorial
+      }
+    });
+  };
+
+
+ const chooseRandomLook = () => {
+
+  if (!tutorial) return;
+
+  navigate("/LoadingPage", {
+    state: {
+      tutorial: tutorial
+    }
+  });
+
+};
  
 
   return (
     <div className="flex flex-col items-center">
       <video ref={videoRef} autoPlay playsInline width="640" height="480" />
+
+
+{showResultScreen && prediction && (
+  <div className="fixed bottom-0 left-0 w-full h-full bg-black text-white
+                  flex flex-col items-center justify-center
+                  animate-slideUp">
+
+    <h1 className="text-3xl font-bold mb-4">
+      Your face shape is {prediction.face_shape}
+    </h1>
+
+    <p className="text-lg mb-10 text-center px-10">
+      I have multiple looks that I think will suit you.
+      Would you like me to choose one randomly,
+      or do you want to choose it yourself?
+    </p>
+
+    <div className="flex gap-6">
       <button
+        onClick={chooseRandomLook}
+        className="bg-purple-500 px-6 py-3 rounded-xl"
+      >
+        Choose Random Look
+      </button>
+
+      <button
+        className="bg-gray-500 px-6 py-3 rounded-xl"
+      >
+        Choose Myself
+      </button>
+    </div>
+  </div>
+)}
+      {/* <button
         onClick={captureAndSend}
         className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
       >
         Capture & Detect Face Shape
-      </button>
+      </button> */}
 
       {prediction && (
         <p className="mt-4 text-lg font-semibold text-gray-800">
-             Face shape: {prediction.face_shape} <br />
-             Confidence: {(prediction.confidence * 100).toFixed(1)}%
-        </p>    
+          Face shape: {prediction.face_shape} <br />
+          Confidence: {(prediction.confidence * 100).toFixed(1)}%
+        </p>
       )}
+
+      {/* <button
+        onClick={startSession}
+        className="w-full mt-6 bg-gradient-to-r from-pink-500 to-purple-500 
+                   text-white py-4 rounded-2xl font-semibold text-lg 
+                   hover:opacity-90 transition"
+      >
+        Start Makeup Session ▶
+      </button> */}
     </div>
   );
 }

@@ -16,21 +16,15 @@ export default function MakeUpPreference() {
   const selectButton = (value, field) => (
     <button
       onClick={() => setFormData({ ...formData, [field]: value })}
-      className={`px-4 py-3 rounded-xl border font-medium transition
-        ${
-          formData[field] === value
-            ? "bg-pink-500 text-white border-pink-500"
-            : "bg-white text-gray-700 border-gray-200 hover:border-pink-300"
-        }`}
+      className={`px-4 py-3 rounded-xl border font-medium transition ${
+        formData[field] === value
+          ? "bg-pink-500 text-white border-pink-500"
+          : "bg-white text-gray-700 border-gray-200 hover:border-pink-300"
+      }`}
     >
       {value}
     </button>
   );
-
-  const startSession = () => {
-    console.log("Makeup Session Data:", formData);
-    navigate("/LoadingPage");
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center p-6">
@@ -123,10 +117,8 @@ export default function MakeUpPreference() {
 
         {/* Start Button */}
         <button
-          onClick={startSession}
-          className="w-full bg-gradient-to-r from-pink-500 to-purple-500 
-                     text-white py-4 rounded-2xl font-semibold text-lg 
-                     hover:opacity-90 transition"
+          onClick={() => navigate("/FaceCapture", { state: formData })}
+          className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-4 rounded-2xl font-semibold text-lg hover:opacity-90 transition"
         >
           Start Makeup Session ▶
         </button>
