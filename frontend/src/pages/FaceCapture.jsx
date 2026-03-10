@@ -102,9 +102,32 @@ function FaceCapture() {
  
 
   return (
-    <div className="flex flex-col items-center">
-      <video ref={videoRef} autoPlay playsInline width="640" height="480" />
+    <div className="w-screen h-screen flex items-center justify-center bg-white">
 
+  <div className="relative w-[640px] h-[480px] flex items-center justify-center">
+
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      className="w-full h-full object-cover rounded-xl"
+    />
+
+    {/* Face outline guide */}
+    <div className="absolute border-4 border-white rounded-full w-72 h-80 opacity-70"></div>
+
+    {/* scanning line */}
+    <div className="absolute w-full h-[2px] bg-pink-400 animate-scan"></div>
+
+    {/* camera frame corners */}
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute top-4 left-4 w-10 h-10 border-l-4 border-t-4 border-white"></div>
+      <div className="absolute top-4 right-4 w-10 h-10 border-r-4 border-t-4 border-white"></div>
+      <div className="absolute bottom-4 left-4 w-10 h-10 border-l-4 border-b-4 border-white"></div>
+      <div className="absolute bottom-4 right-4 w-10 h-10 border-r-4 border-b-4 border-white"></div>
+    </div>
+
+  </div>
 
 {showResultScreen && prediction && (
   <div className="fixed bottom-0 left-0 w-full h-full bg-black text-white
@@ -137,28 +160,15 @@ function FaceCapture() {
     </div>
   </div>
 )}
-      {/* <button
-        onClick={captureAndSend}
-        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-      >
-        Capture & Detect Face Shape
-      </button> */}
 
-      {prediction && (
-        <p className="mt-4 text-lg font-semibold text-gray-800">
-          Face shape: {prediction.face_shape} <br />
-          Confidence: {(prediction.confidence * 100).toFixed(1)}%
-        </p>
-      )}
 
-      {/* <button
-        onClick={startSession}
-        className="w-full mt-6 bg-gradient-to-r from-pink-500 to-purple-500 
-                   text-white py-4 rounded-2xl font-semibold text-lg 
-                   hover:opacity-90 transition"
-      >
-        Start Makeup Session ▶
-      </button> */}
+{prediction && ( 
+  <p className="mt-4 text-lg font-semibold text-gray-800"> 
+  Face shape: {prediction.face_shape} 
+  <br /> 
+  Confidence: {(prediction.confidence * 100).toFixed(1)}% </p> 
+)}
+
     </div>
   );
 }

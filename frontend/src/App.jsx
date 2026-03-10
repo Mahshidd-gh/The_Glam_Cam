@@ -7,6 +7,7 @@ import FaceCapture from "./pages/FaceCapture";
 import LoadingPage from "./pages/LoadingPage";
 import HomePage from "./pages/HomePage";
 import Tutorial from "./pages/tutorial";
+import GlamCamAR from "./pages/GlamCamAR";
 
 // App = Router + Routes
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <Route path="/FaceCapture" element={<FaceCapture />} />
         <Route path="/LoadingPage" element={<LoadingPage />} />
         <Route path="/tutorial" element={<Tutorial />} />
+        <Route path="/GlamCamAR" element={<GlamCamAR />} />
       </Routes>
     </Router>
   );
