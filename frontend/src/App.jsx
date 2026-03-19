@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route} from "react-router-dom";
+import "./index.css";
 import History from "./pages/History";
 import MakeUpPreference from "./pages/MakeUpPreference";
 import CustomizeMirror from "./pages/MirrorSetting";
@@ -9,7 +10,6 @@ import HomePage from "./pages/HomePage";
 import Tutorial from "./pages/tutorial";
 import GlamCamAR from "./pages/GlamCamAR";
 
-// App = Router + Routes
 function App() {
   return (
     <Router>

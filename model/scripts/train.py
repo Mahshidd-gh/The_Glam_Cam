@@ -14,10 +14,8 @@ import mediapipe as mp
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
-# ======================
+ 
 # CONFIG
-# ======================
-
 DATA_PATH = "../data/train"
 IMG_SIZE = 224
 BATCH_SIZE = 16
@@ -27,20 +25,16 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
-# ======================
+ 
 # MEDIAPIPE
-# ======================
-
 mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
     static_image_mode=True,
     max_num_faces=1,
     refine_landmarks=True
 )
 
-# ======================
+ 
 # GEOMETRY FUNCTIONS
-# ======================
-
 def extract_landmarks(image):
     img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     result = mp_face_mesh.process(img_rgb)
@@ -71,10 +65,8 @@ def geometry_features(landmarks):
         forehead / height
     ], dtype=np.float32)
 
-# ======================
+ 
 # DATASET
-# ======================
-
 class FaceShapeDataset(Dataset):
     def __init__(self, samples, labels, transform=None):
         self.samples = samples
@@ -102,10 +94,8 @@ class FaceShapeDataset(Dataset):
 
         return image, torch.tensor(geom), label
 
-# ======================
+ 
 # LOAD DATA
-# ======================
-
 samples, labels = [], []
 
 class_names = sorted([
@@ -132,10 +122,8 @@ X_train, X_test, y_train, y_test = train_test_split(
     samples, labels, test_size=0.2, stratify=labels
 )
 
-# ======================
+ 
 # TRANSFORMS
-# ======================
-
 transform = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ToTensor(),
@@ -145,10 +133,8 @@ transform = transforms.Compose([
     )
 ])
 
-# ======================
+ 
 # MODEL
-# ======================
-
 class CNNBackbone(nn.Module):
     def __init__(self):
         super().__init__()
@@ -180,10 +166,8 @@ class Hybrid_Model(nn.Module):
         fused = torch.cat((cnn_feat, geom_feat), dim=1)
         return self.classifier(fused)
 
-# ======================
+ 
 # TRAINING
-# ======================
-
 model = Hybrid_Model().to(DEVICE)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -210,10 +194,8 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch + 1}: Loss = {total_loss:.4f}")
 
-# ======================
+ 
 # EVALUATION
-# ======================
-
 test_ds = FaceShapeDataset(X_test, y_test, transform)
 test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE)
 
@@ -228,10 +210,7 @@ with torch.no_grad():
 
 print(classification_report(gts, preds))
 
-# ======================
 # SAVE MODEL
-# ======================
-
 os.makedirs("../models", exist_ok=True)
 
 torch.save(model.state_dict(), "../models/face_shape.pt")
@@ -239,4 +218,4 @@ torch.save(model.state_dict(), "../models/face_shape.pt")
 with open("../models/class_names.json", "w") as f:
     json.dump(class_names, f)
 
-print("✅ Model and class names saved successfully")
+print("Model and class names saved successfully")

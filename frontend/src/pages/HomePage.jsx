@@ -22,14 +22,6 @@ export default function HomePage() {
           Your smart beauty mirror
         </p>
 
-        {/* Main buttons */}
-        {/* <button
-          onClick={() => navigate("/FaceCapture")}
-          className="w-full py-3 rounded-xl bg-pink-500 text-white font-semibold hover:bg-purple-600 transition"
-        >
-          📷 Start your journey
-        </button> */}
-
         <button
           onClick={() => navigate("/MakeUpPreference")}
           className="w-full py-3 rounded-xl bg-purple-500 text-white font-semibold hover:bg-pink-600 transition"

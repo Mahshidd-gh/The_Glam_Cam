@@ -1,649 +1,618 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 
-// ─── Palette builder ─────────────────────────────────────────────────────────
+// ─── Colours ───────────────────────────────────────────────────────────────
+const R = "rgba(220,30,30,";
+const RS = "rgba(255,60,60,";
 
-const BASE_PALETTE = {
-  blush:     { fill:   [200,  80, 100], alpha: 0.35, blur: 28 },
-  eyeshadow: { fill:   [130,  60, 180], alpha: 0.45, blur: 10 },
-  eyeliner:  { stroke: [ 20,  10,  10], alpha: 0.88, width: 3, blur: 1 },
-  lashes:    { stroke: [ 10,   5,   5], alpha: 0.72, width: 2, blur: 1 },
-  waterline: { stroke: [ 40,  10,  20], alpha: 0.50, width: 1, blur: 1 },
-  lips:      { fill:   [180,  30,  60], alpha: 0.55, blur: 5  },
-  contour:   { fill:   [ 80,  50,  30], alpha: 0.25, blur: 32 },
-  highlight: { fill:   [255, 240, 200], alpha: 0.30, blur: 14 },
-};
-
-const SHAPE_OVERRIDES = {
-  round:   { contour:   { alpha: 0.40, blur: 36 } },
-  square:  { contour:   { alpha: 0.45, blur: 36 }, highlight: { alpha: 0.38 } },
-  heart:   { blush:     { alpha: 0.42 }, contour: { alpha: 0.32 } },
-  diamond: { blush:     { alpha: 0.48 }, highlight: { alpha: 0.42 } },
-  oval:    { contour:   { alpha: 0.20 } },
-};
-
-function buildPalette(faceShape) {
-  const palette = JSON.parse(JSON.stringify(BASE_PALETTE));
-  const overrides = SHAPE_OVERRIDES[faceShape] || {};
-  for (const [zone, props] of Object.entries(overrides)) {
-    Object.assign(palette[zone], props);
-  }
-  return palette;
+// ─── Keyword helpers ────────────────────────────────────────────────────────
+function matchesKeyword(text, keyword) {
+  const esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z])${esc}(?![a-z])`, "i").test(text);
 }
 
-// ─── Canvas drawing helpers ───────────────────────────────────────────────────
-
-function drawFill(ctx, pts, style) {
-  if (!pts || pts.length < 3) return;
-  const [r, g, b] = style.fill;
-  ctx.save();
-  ctx.filter = `blur(${style.blur}px)`;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  ctx.fillStyle = `rgba(${r},${g},${b},${style.alpha})`;
-  ctx.fill();
-  ctx.restore();
+export function parseZones(text) {
+  const lower = text.toLowerCase();
+  const zones = new Set();
+  KEYWORD_ZONES.forEach(rule => {
+    if (rule.keywords.some(k => matchesKeyword(lower, k)))
+      rule.zones.forEach(z => zones.add(z));
+  });
+  return [...zones];
 }
 
-function drawStroke(ctx, pts, style) {
-  if (!pts || pts.length < 2) return;
-  const [r, g, b] = style.stroke;
-  ctx.save();
-  ctx.filter      = `blur(${style.blur}px)`;
-  ctx.lineWidth   = style.width;
-  ctx.lineCap     = "round";
-  ctx.lineJoin    = "round";
-  ctx.strokeStyle = `rgba(${r},${g},${b},${style.alpha})`;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function renderMakeup(ctx, lm, step, palette) {
-  const s = step;
-  if (s === null || s === "contour") {
-    drawFill(ctx, lm.contour_left,  palette.contour);
-    drawFill(ctx, lm.contour_right, palette.contour);
-  }
-  if (s === null || s === "highlight") {
-    drawFill(ctx, lm.nose_highlight, palette.highlight);
-  }
-  if (s === null || s === "blush") {
-    drawFill(ctx, lm.blush_left,  palette.blush);
-    drawFill(ctx, lm.blush_right, palette.blush);
-  }
-  if (s === null || s === "eyeshadow") {
-    drawFill(ctx, lm.eye_left,  palette.eyeshadow);
-    drawFill(ctx, lm.eye_right, palette.eyeshadow);
-  }
-  if (s === null || s === "eyeliner") {
-    drawStroke(ctx, lm.eyeliner_left,  palette.eyeliner);
-    drawStroke(ctx, lm.eyeliner_right, palette.eyeliner);
-  }
-  if (s === null || s === "lashes") {
-    drawStroke(ctx, lm.lash_lower_left,  palette.lashes);
-    drawStroke(ctx, lm.lash_lower_right, palette.lashes);
-    drawStroke(ctx, lm.waterline_left,   palette.waterline);
-    drawStroke(ctx, lm.waterline_right,  palette.waterline);
-  }
-  if (s === null || s === "lips") {
-    drawFill(ctx, lm.lips, palette.lips);
-  }
-}
-
-// ─── Landmark smoothing ───────────────────────────────────────────────────────
-
-const SMOOTHING = 0.4;
-
-function smoothLandmarks(prev, next) {
-  if (!prev) return next;
-  const out = {};
-  for (const zone of Object.keys(next)) {
-    const p = prev[zone] || next[zone];
-    out[zone] = next[zone].map((pt, i) => ({
-      x: pt.x * (1 - SMOOTHING) + (p[i] ? p[i].x : pt.x) * SMOOTHING,
-      y: pt.y * (1 - SMOOTHING) + (p[i] ? p[i].y : pt.y) * SMOOTHING,
-    }));
-  }
-  return out;
-}
-
-// ─── Step definitions ─────────────────────────────────────────────────────────
-
-const STEPS = [
-  { key: null,        label: "All",        icon: "✦", tip: "Preview all makeup zones at once." },
-  { key: "contour",   label: "Contour",    icon: "◈", tip: "Blend into cheek hollows, temples, and sides of the nose." },
-  { key: "highlight", label: "Highlight",  icon: "✧", tip: "Tap onto nose bridge, brow bone, and centre of chin." },
-  { key: "eyeshadow", label: "Eyeshadow",  icon: "◉", tip: "Blend from the lash line up to the crease." },
-  { key: "eyeliner",  label: "Eyeliner",   icon: "—", tip: "Draw along the upper lash line. Flick outward for a wing." },
-  { key: "lashes",    label: "Lashes",     icon: "∿", tip: "Line the lower lid lightly along the waterline." },
-  { key: "blush",     label: "Blush",      icon: "◍", tip: "Smile gently and sweep onto the apples of your cheeks." },
-  { key: "lips",      label: "Lips",       icon: "♡", tip: "Outline with a lip liner first, then fill inward." },
+const KEYWORD_ZONES = [
+  { keywords: ["jawline", "jaw line", "jaw", "ear to chin", "from ear to chin"], zones: ["jawline"] },
+  { keywords: ["chin"], zones: ["chin"] },
+  { keywords: ["corner of mouth", "mouth corner"], zones: ["mouth_corners"] },
+  { keywords: ["apple of the cheek", "cheeks", "cheek"], zones: ["cheeks"] },
+  { keywords: ["cheekbone", "cheek bone", "hollow of the cheek", "hallows of the cheek", "under the cheekbone", "below the cheekbone"], zones: ["cheekbone"] },
+  { keywords: ["cheeks"], zones: ["cheeks"] },
+  { keywords: ["temple", "temples"], zones: ["temples"] },
+  { keywords: ["center of the forehead", "centre of the forehead", "forehead"], zones: ["forehead_center"] },
+  { keywords: ["hairline"], zones: ["hairline"] },
+  { keywords: ["bridge of nose", "nose bridge", "bridge of the nose"], zones: ["nose_bridge"] },
+  { keywords: ["side of the nose", "sides of the nose", "sides of nose", "side of nose", "nose sides"], zones: ["nose_sides"] },
+  { keywords: ["tip of the nose", "tip of nose", "nose tip"], zones: ["nose_tip"] },
+  { keywords: ["brow bone", "browbone"], zones: ["brow_bone"] },
+  { keywords: ["eyebrow", "brow"], zones: ["brows"] },
+  { keywords: ["socket line", "eye socket", "socket"], zones: ["eye_socket"] },
+  { keywords: ["cut crease", "crease"], zones: ["eye_crease"] },
+  { keywords: ["upper lash line", "upper lashline", "mobile lid", "upper lid"], zones: ["eye_upper_lid"] },
+  { keywords: ["lid"], zones: ["eye_upper_lid"] },
+  { keywords: ["inner corner", "inner corners", "inside eye"], zones: ["eye_inner_corner"] },
+  { keywords: ["outer v", "outer corner", "outer eye"], zones: ["eye_outer_v"] },
+  { keywords: ["lower lash line", "lower lashline", "lash line", "lower waterline", "upper waterline", "waterline", "lower lids", "lower lid"], zones: ["lash_line"] },
+  { keywords: ["lashes", "lash"], zones: ["lash_line"] },
+  { keywords: ["eyeliner", "liner", "wing", "tight-line"], zones: ["eyeliner"] },
+  { keywords: ["cupid's bow", "cupids bow", "cupid bow", "top lip", "upper lip"], zones: ["lip_top"] },
+  { keywords: ["lower lip", "bottom lip"], zones: ["lip_bottom"] },
+  { keywords: ["lips", "lip"], zones: ["lip_top", "lip_bottom"] },
+  { keywords: ["full face", "entire face", "all over", "evenly"], zones: ["full_face"] },
 ];
 
-const FACE_SHAPES = ["default", "oval", "round", "square", "heart", "diamond"];
+export const ZONE_META = {
+  full_face: "Full Face", jawline: "Jawline", chin: "Chin",
+  mouth_corners: "Corner of Mouth", cheekbone: "Cheekbone",
+  cheeks: "Cheeks", temples: "Temples",
+  forehead_center: "Forehead", hairline: "Hairline",
+  nose_bridge: "Nose Bridge", nose_sides: "Sides of Nose", nose_tip: "Nose Tip",
+  brow_bone: "Brow Bone", brows: "Eyebrows", eye_socket: "Socket Line",
+  eye_crease: "Crease", eye_upper_lid: "Upper Lid",
+  eye_inner_corner: "Inner Corner", eye_outer_v: "Outer V",
+  lash_line: "Lash Line", eyeliner: "Eyeliner",
+  lip_top: "Top Lip", lip_bottom: "Lower Lip",
+};
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── MediaPipe landmark indices for each zone ───────────────────────────────
+// These map zone names → arrays of landmark point indices from FaceMesh's 468-point model
+const ZONE_LANDMARKS = {
+  full_face: [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109],
+  jawline: [172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323],
+  chin: [152, 377, 378, 379, 175, 396, 152],
+  mouth_corners: [61, 291],
+  cheeks: [117, 118, 119, 120, 121, 346, 347, 348, 349, 350],
+  cheekbone: [116, 123, 147, 213, 192, 214, 207, 345, 372, 376, 433, 416, 434, 427],
+  temples: [162, 127, 356, 389],
+  forehead_center: [151, 9, 8, 107, 336],
+  hairline: [10, 338, 297, 332, 284, 251, 301, 368, 264, 447, 366, 401, 435, 367, 364, 394, 395, 378, 292, 361, 323, 454, 356, 389, 251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 127, 234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152],
+  nose_bridge: [168, 6, 197, 195, 5],
+  nose_sides: [48, 64, 98, 97, 2, 326, 327, 278, 294],
+  nose_tip: [1, 2, 98, 327, 168],
+  brow_bone: [70, 63, 105, 66, 107, 336, 296, 334, 293, 300],
+  brows: [70, 63, 105, 66, 107, 55, 65, 52, 53, 46, 336, 296, 334, 293, 300, 285, 295, 282, 283, 276],
+  eye_socket: [226, 247, 30, 29, 27, 28, 56, 190, 243, 112, 26, 22, 23, 24, 110, 25, 446, 467, 260, 259, 257, 258, 286, 414, 463, 341, 256, 252, 253, 254, 339, 255],
+  eye_crease: [226, 247, 30, 29, 27, 28, 56, 190, 446, 467, 260, 259, 257, 258, 286, 414],
+  eye_upper_lid: [246, 161, 160, 159, 158, 157, 173, 466, 388, 387, 386, 385, 384, 398],
+  eye_inner_corner: [243, 112, 463, 341],
+  eye_outer_v: [33, 130, 263, 359],
+  lash_line: [33, 7, 163, 144, 145, 153, 154, 155, 133, 263, 249, 390, 373, 374, 380, 381, 382, 362],
+  eyeliner: [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246, 263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466],
+  lip_top: [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78],
+  lip_bottom: [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78],
+};
 
-export default function GlamCamAR({
-  apiBase    = "/api/ar",
-  fps        = 15,
-  initialShape = "default",
-}) {
-  const videoRef  = useRef(null);
-  const canvasRef = useRef(null);
-  const lastLMRef = useRef(null);
-  const timerRef  = useRef(null);
-  const runningRef = useRef(false);
 
-  const [isActive,    setIsActive]    = useState(false);
-  const [faceShape,   setFaceShape]   = useState(initialShape);
-  const [activeStep,  setActiveStep]  = useState(null);
-  const [faceFound,   setFaceFound]   = useState(false);
-  const [status,      setStatus]      = useState("idle"); // idle | loading | running | error
-  const [errorMsg,    setErrorMsg]    = useState("");
+function lmPx(lm, idx, w, h, mirrored = true) {
+  const p = lm[idx];
+  if (!p) return null;
+  return {
+    x: mirrored ? (1 - p.x) * w : p.x * w,
+    y: p.y * h,
+  };
+}
 
-  const paletteRef = useRef(buildPalette(initialShape));
+function drawZone(ctx, zone, lm, w, h) {
+  const indices = ZONE_LANDMARKS[zone];
+  if (!indices) return;
 
-  // Rebuild palette when face shape changes
-  useEffect(() => {
-    paletteRef.current = buildPalette(faceShape);
-  }, [faceShape]);
+  const pts = indices.map(i => lmPx(lm, i, w, h)).filter(Boolean);
+  if (pts.length === 0) return;
 
-  // ── Frame capture ───────────────────────────────────────────────────────────
-  const captureFrame = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return null;
-    const sw = video.videoWidth  || 640;
-    const sh = video.videoHeight || 480;
-    const tw = Math.min(sw, 640);
-    const th = Math.round(sh * tw / sw);
-    const tmp = document.createElement("canvas");
-    tmp.width  = tw;
-    tmp.height = th;
-    tmp.getContext("2d").drawImage(video, 0, 0, tw, th);
-    return tmp.toDataURL("image/jpeg", 0.80);
-  }, []);
+  ctx.save();
 
-  // ── API call ────────────────────────────────────────────────────────────────
-  const fetchLandmarks = useCallback(async (b64) => {
-    const res = await fetch(`${apiBase}/landmarks`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ frame: b64 }),
+  // glow effect
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = RS + "0.9)";
+
+  if (zone === "jawline") {
+    // draw as a stroke along jawline points
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = RS + "0.95)";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+    // soft wide glow pass
+    ctx.shadowBlur = 30;
+    ctx.lineWidth = 18;
+    ctx.strokeStyle = R + "0.25)";
+    ctx.stroke();
+
+  } else if (zone === "hairline") {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = RS + "0.95)";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.shadowBlur = 30;
+    ctx.lineWidth = 18;
+    ctx.strokeStyle = R + "0.25)";
+    ctx.stroke();
+
+  } else if (["brows", "eye_socket", "eye_crease", "lash_line", "eyeliner"].includes(zone)) {
+    // split left/right eye roughly at centre
+    const midX = w / 2;
+    const left = pts.filter(p => p.x > midX); // mirrored: left face = higher x
+    const right = pts.filter(p => p.x <= midX);
+
+    [left, right].forEach(side => {
+      if (side.length < 2) return;
+      const sorted = [...side].sort((a, b) => a.x - b.x);
+      ctx.beginPath();
+      ctx.moveTo(sorted[0].x, sorted[0].y);
+      sorted.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.strokeStyle = RS + "0.95)";
+      ctx.lineWidth = zone === "brows" ? 6 : 3.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+      ctx.shadowBlur = 24;
+      ctx.lineWidth = zone === "brows" ? 16 : 12;
+      ctx.strokeStyle = R + "0.22)";
+      ctx.stroke();
     });
-    if (!res.ok) throw new Error(`API ${res.status}`);
-    return res.json();
-  }, [apiBase]);
 
-  // ── Render frame ────────────────────────────────────────────────────────────
-  const renderFrame = useCallback(async () => {
-    const video  = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+  } else {
+    // filled polygon zone (convex hull approximation via point cloud)
+    const hull = convexHull(pts);
+    if (hull.length < 3) return;
+    ctx.beginPath();
+    ctx.moveTo(hull[0].x, hull[0].y);
+    hull.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.fillStyle = R + "0.30)";
+    ctx.fill();
+    ctx.strokeStyle = RS + "0.85)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 
-    if (canvas.width  !== video.videoWidth)  canvas.width  = video.videoWidth  || 640;
-    if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight || 480;
+  ctx.restore();
+}
 
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Simple convex hull (Graham scan) so filled zones look clean
+function convexHull(points) {
+  if (points.length < 3) return points;
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (O, A, B) => (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+  const lower = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+      lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+      upper.pop();
+    upper.push(p);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
 
-    const b64 = captureFrame();
-    if (!b64) return;
+// ─── Flash animation state ──────────────────────────────────────────────────
+// We track when animKey last changed and produce a 0-1 opacity multiplier
+function flashOpacity(startTime) {
+  const t = (Date.now() - startTime) / 1200; // 1200ms like the original
+  if (t >= 1) return 1;
+  // keyframes: 0→1 at 0.12, back 0 at 0.25, 1 at 0.38, 0 at 0.5, 1 at 0.62, stay 1
+  const kf = [[0, 0], [0.12, 1], [0.25, 0], [0.38, 1], [0.50, 0], [0.62, 1], [1, 1]];
+  for (let i = 1; i < kf.length; i++) {
+    if (t <= kf[i][0]) {
+      const prog = (t - kf[i - 1][0]) / (kf[i][0] - kf[i - 1][0]);
+      return kf[i - 1][1] + prog * (kf[i][1] - kf[i - 1][1]);
+    }
+  }
+  return 1;
+}
 
-    const data = await fetchLandmarks(b64);
+// ─── ZoneOverlay: canvas overlay with face tracking ─────────────────────────
+export function ZoneOverlay({ zones, animKey, videoRef }) {
+  const canvasRef = useRef(null);
+  const faceMeshRef = useRef(null);
+  const rafRef = useRef(null);
+  const latestLandmarks = useRef(null);
+  const animStartRef = useRef(Date.now());
 
-    if (!data?.face_detected || !data?.landmarks) {
-      setFaceFound(false);
-      return;
+  // Track when animKey changes to restart flash
+  useEffect(() => {
+    animStartRef.current = Date.now();
+  }, [animKey]);
+
+  // Load MediaPipe FaceMesh once
+  useEffect(() => {
+    let destroyed = false;
+
+    async function loadMediaPipe() {
+      // Dynamically load scripts if not already present
+      await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
+      await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js");
+
+      if (destroyed) return;
+
+      const faceMesh = new window.FaceMesh({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+      });
+
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+
+      faceMesh.onResults((results) => {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+          latestLandmarks.current = results.multiFaceLandmarks[0];
+        } else {
+          latestLandmarks.current = null;
+        }
+      });
+
+      faceMeshRef.current = faceMesh;
     }
 
-    setFaceFound(true);
-    const lm = smoothLandmarks(lastLMRef.current, data.landmarks);
-    lastLMRef.current = lm;
+    loadMediaPipe().catch(console.error);
 
-    // Mirror transform — video feed is already flipped by CSS, canvas must match
-    ctx.save();
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    renderMakeup(ctx, lm, activeStep, paletteRef.current);
-    ctx.restore();
-  }, [captureFrame, fetchLandmarks, activeStep]);
-
-  // ── Loop ────────────────────────────────────────────────────────────────────
-  const loop = useCallback(() => {
-    if (!runningRef.current) return;
-    timerRef.current = setTimeout(async () => {
-      try { await renderFrame(); } catch (e) { console.warn("[GlamCamAR]", e.message); }
-      loop();
-    }, 1000 / fps);
-  }, [renderFrame, fps]);
-
-  // ── Start / Stop ────────────────────────────────────────────────────────────
-  const startAR = useCallback(async () => {
-    setStatus("loading");
-    setErrorMsg("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await new Promise(r => { videoRef.current.onloadedmetadata = r; });
-        await videoRef.current.play();
+    return () => {
+      destroyed = true;
+      if (faceMeshRef.current) {
+        faceMeshRef.current.close();
+        faceMeshRef.current = null;
       }
-      runningRef.current = true;
-      setIsActive(true);
-      setStatus("running");
-      loop();
-    } catch (e) {
-      setStatus("error");
-      setErrorMsg(e.message || "Camera access denied");
-    }
-  }, [loop]);
-
-  const stopAR = useCallback(() => {
-    runningRef.current = false;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    const video = videoRef.current;
-    if (video?.srcObject) {
-      video.srcObject.getTracks().forEach(t => t.stop());
-      video.srcObject = null;
-    }
-    const canvas = canvasRef.current;
-    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-    setIsActive(false);
-    setFaceFound(false);
-    setStatus("idle");
-    lastLMRef.current = null;
+    };
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => () => stopAR(), [stopAR]);
+  // Per-frame render loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  const currentStep = STEPS.find(s => s.key === activeStep) || STEPS[0];
+    let frameCount = 0;
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+    async function loop() {
+      const video = videoRef?.current;
+      const faceMesh = faceMeshRef.current;
+      const ctx = canvas.getContext("2d");
+
+      // Sync canvas size to its display size
+      const { offsetWidth: w, offsetHeight: h } = canvas;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Send every 2nd frame to FaceMesh (saves CPU, still smooth)
+      if (faceMesh && video && video.readyState >= 2) {
+        frameCount++;
+        if (frameCount % 2 === 0) {
+          await faceMesh.send({ image: video });
+        }
+      }
+
+      const lm = latestLandmarks.current;
+      if (lm && zones.length > 0) {
+        const opacity = flashOpacity(animStartRef.current);
+        ctx.globalAlpha = opacity;
+        zones.forEach(zone => drawZone(ctx, zone, lm, w, h));
+        ctx.globalAlpha = 1;
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+    }
+
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [zones, videoRef]);
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #0a0608 0%, #120b0f 50%, #0d0810 100%)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "24px",
-      fontFamily: "'Cormorant Garamond', Georgia, serif",
-    }}>
-      {/* Google Font */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&display=swap');
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
 
-        * { box-sizing: border-box; }
+// Helper: load a script tag once
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement("script");
+    s.src = src;
+    s.crossOrigin = "anonymous";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 
-        .gc-mirror-frame {
-          position: relative;
-          border-radius: 50% / 45%;
-          overflow: hidden;
-          box-shadow:
-            0 0 0 2px rgba(210,170,130,0.15),
-            0 0 0 8px rgba(120,80,50,0.08),
-            0 0 60px rgba(200,80,100,0.12),
-            0 40px 120px rgba(0,0,0,0.8);
-        }
-        .gc-mirror-frame::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background: linear-gradient(
-            135deg,
-            rgba(255,255,255,0.06) 0%,
-            transparent 40%,
-            transparent 60%,
-            rgba(255,255,255,0.02) 100%
-          );
-          pointer-events: none;
-          z-index: 10;
-        }
+// ─── FaceSVG (unchanged — used in GlamCamAR preview page) ───────────────────
+const FACE_PATH = "M100,55 C155,38 205,38 260,55 C318,82 330,145 328,198 C323,272 296,328 235,350 C200,362 160,362 125,350 C64,328 37,272 32,198 C30,145 42,82 100,55Z";
 
-        .gc-step-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 7px 16px;
-          border-radius: 100px;
-          border: 1px solid rgba(210,170,130,0.2);
-          background: rgba(255,255,255,0.04);
-          color: rgba(240,210,190,0.7);
-          font-family: 'DM Mono', monospace;
-          font-size: 11px;
-          letter-spacing: 0.08em;
-          cursor: pointer;
-          transition: all 0.22s ease;
-          white-space: nowrap;
-        }
-        .gc-step-pill:hover {
-          background: rgba(200,80,100,0.18);
-          border-color: rgba(200,80,100,0.45);
-          color: rgba(255,210,200,0.95);
-        }
-        .gc-step-pill.active {
-          background: rgba(200,80,100,0.32);
-          border-color: rgba(220,120,130,0.7);
-          color: #fde8e0;
-          box-shadow: 0 0 18px rgba(200,80,100,0.25);
-        }
+const ZONE_SHAPES = {
+  full_face: [{ type: "path", d: "M100,60 C155,42 205,42 260,60 C318,88 328,148 325,200 C320,270 295,325 235,348 C200,360 160,360 125,348 C65,325 40,270 35,200 C32,148 42,88 100,60Z", fill: "rgba(220,30,30,0.20)", stroke: "rgba(255,60,60,0.70)", sw: 2.5 }],
+  jawline: [
+    { type: "path", d: "M60,222 Q50,265 62,302 Q85,338 148,356", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 5 },
+    { type: "path", d: "M300,222 Q310,265 298,302 Q275,338 212,356", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 5 },
+    { type: "path", d: "M60,222 Q50,265 62,302 Q85,338 148,356", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 20 },
+    { type: "path", d: "M300,222 Q310,265 298,302 Q275,338 212,356", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 20 },
+  ],
+  chin: [{ type: "ellipse", cx: 180, cy: 354, rx: 42, ry: 16, fill: "rgba(220,30,30,0.30)", stroke: "rgba(255,60,60,0.80)", sw: 2.5 }],
+  mouth_corners: [
+    { type: "ellipse", cx: 143, cy: 298, rx: 14, ry: 11, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.80)", sw: 2 },
+    { type: "ellipse", cx: 217, cy: 298, rx: 14, ry: 11, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.80)", sw: 2 },
+  ],
+  cheekbone: [
+    { type: "ellipse", cx: 92, cy: 192, rx: 52, ry: 12, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.90)", sw: 2.5 },
+    { type: "ellipse", cx: 268, cy: 192, rx: 52, ry: 12, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.90)", sw: 2.5 },
+  ],
+  cheek: [
+    { type: "ellipse", cx: 108, cy: 240, rx: 46, ry: 40, fill: "rgba(220,30,30,0.32)", stroke: "rgba(255,60,60,0.78)", sw: 2.5 },
+    { type: "ellipse", cx: 252, cy: 240, rx: 46, ry: 40, fill: "rgba(220,30,30,0.32)", stroke: "rgba(255,60,60,0.78)", sw: 2.5 },
+  ],
+  temples: [
+    { type: "ellipse", cx: 50, cy: 108, rx: 26, ry: 40, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.75)", sw: 2 },
+    { type: "ellipse", cx: 310, cy: 108, rx: 26, ry: 40, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.75)", sw: 2 },
+  ],
+  forehead_center: [{ type: "ellipse", cx: 180, cy: 68, rx: 65, ry: 26, fill: "rgba(220,30,30,0.25)", stroke: "rgba(255,60,60,0.68)", sw: 2 }],
+  hairline: [
+    { type: "path", d: "M68,62 Q118,36 180,32 Q242,36 292,62", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 5 },
+    { type: "path", d: "M68,62 Q118,36 180,32 Q242,36 292,62", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 20 },
+  ],
+  nose_bridge: [{ type: "ellipse", cx: 180, cy: 192, rx: 10, ry: 42, fill: "rgba(220,30,30,0.25)", stroke: "rgba(255,60,60,0.72)", sw: 2 }],
+  nose_sides: [
+    { type: "ellipse", cx: 157, cy: 222, rx: 13, ry: 16, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.72)", sw: 2 },
+    { type: "ellipse", cx: 203, cy: 222, rx: 13, ry: 16, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.72)", sw: 2 },
+  ],
+  nose_tip: [{ type: "ellipse", cx: 180, cy: 232, rx: 17, ry: 13, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.72)", sw: 2 }],
+  brow_bone: [
+    { type: "ellipse", cx: 118, cy: 140, rx: 35, ry: 9, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.72)", sw: 2 },
+    { type: "ellipse", cx: 242, cy: 140, rx: 35, ry: 9, fill: "rgba(220,30,30,0.28)", stroke: "rgba(255,60,60,0.72)", sw: 2 },
+  ],
+  brows: [
+    { type: "path", d: "M84,129 Q108,118 142,125", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 7 },
+    { type: "path", d: "M218,125 Q252,118 276,129", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 7 },
+    { type: "path", d: "M84,129 Q108,118 142,125", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 18 },
+    { type: "path", d: "M218,125 Q252,118 276,129", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 18 },
+  ],
+  eye_socket: [
+    { type: "path", d: "M86,150 Q118,137 150,150", fill: "none", stroke: "rgba(255,60,60,0.90)", sw: 3.5 },
+    { type: "path", d: "M210,150 Q242,137 274,150", fill: "none", stroke: "rgba(255,60,60,0.90)", sw: 3.5 },
+    { type: "path", d: "M86,150 Q118,137 150,150", fill: "none", stroke: "rgba(220,30,30,0.22)", sw: 14 },
+    { type: "path", d: "M210,150 Q242,137 274,150", fill: "none", stroke: "rgba(220,30,30,0.22)", sw: 14 },
+  ],
+  eye_crease: [
+    { type: "path", d: "M87,152 Q118,142 149,152", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 4.5 },
+    { type: "path", d: "M211,152 Q242,142 273,152", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 4.5 },
+    { type: "path", d: "M87,152 Q118,142 149,152", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 16 },
+    { type: "path", d: "M211,152 Q242,142 273,152", fill: "none", stroke: "rgba(220,30,30,0.25)", sw: 16 },
+  ],
+  eye_upper_lid: [
+    { type: "ellipse", cx: 118, cy: 161, rx: 35, ry: 13, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.85)", sw: 2.5 },
+    { type: "ellipse", cx: 242, cy: 161, rx: 35, ry: 13, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.85)", sw: 2.5 },
+  ],
+  eye_inner_corner: [
+    { type: "ellipse", cx: 88, cy: 161, rx: 11, ry: 9, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.82)", sw: 2 },
+    { type: "ellipse", cx: 272, cy: 161, rx: 11, ry: 9, fill: "rgba(220,30,30,0.35)", stroke: "rgba(255,60,60,0.82)", sw: 2 },
+  ],
+  eye_outer_v: [
+    { type: "path", d: "M147,156 L158,163 L147,170", fill: "none", stroke: "rgba(255,60,60,0.92)", sw: 4 },
+    { type: "path", d: "M213,156 L202,163 L213,170", fill: "none", stroke: "rgba(255,60,60,0.92)", sw: 4 },
+  ],
+  lash_line: [
+    { type: "path", d: "M85,170 Q102,178 118,179 Q134,178 151,170", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 4.5 },
+    { type: "path", d: "M209,170 Q226,178 242,179 Q258,178 275,170", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 4.5 },
+    { type: "path", d: "M85,170 Q102,178 118,179 Q134,178 151,170", fill: "none", stroke: "rgba(220,30,30,0.22)", sw: 14 },
+    { type: "path", d: "M209,170 Q226,178 242,179 Q258,178 275,170", fill: "none", stroke: "rgba(220,30,30,0.22)", sw: 14 },
+  ],
+  eyeliner: [
+    { type: "path", d: "M85,164 Q118,154 151,164", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 3.5 },
+    { type: "path", d: "M151,164 L140,154", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 3.5 },
+    { type: "path", d: "M275,164 Q242,154 209,164", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 3.5 },
+    { type: "path", d: "M209,164 L220,154", fill: "none", stroke: "rgba(255,60,60,0.95)", sw: 3.5 },
+  ],
+  lip_top: [{ type: "path", d: "M148,291 Q163,281 180,285 Q197,281 212,291 Q198,297 180,295 Q162,297 148,291Z", fill: "rgba(220,30,30,0.45)", stroke: "rgba(255,60,60,0.90)", sw: 2 }],
+  lip_bottom: [{ type: "path", d: "M148,295 Q162,297 180,299 Q198,297 212,295 Q204,318 180,322 Q156,318 148,295Z", fill: "rgba(220,30,30,0.45)", stroke: "rgba(255,60,60,0.90)", sw: 2 }],
+};
 
-        .gc-shape-pill {
-          padding: 5px 14px;
-          border-radius: 100px;
-          border: 1px solid rgba(210,170,130,0.15);
-          background: transparent;
-          color: rgba(200,160,130,0.6);
-          font-family: 'DM Mono', monospace;
-          font-size: 10px;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .gc-shape-pill:hover {
-          border-color: rgba(210,170,130,0.4);
-          color: rgba(220,180,150,0.9);
-        }
-        .gc-shape-pill.active {
-          background: rgba(210,170,130,0.12);
-          border-color: rgba(210,170,130,0.5);
-          color: rgba(240,200,170,1);
-        }
+function ZoneLayer({ shapes }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || shapes.length === 0) return;
+    el.animate(
+      [
+        { opacity: 0, offset: 0 }, { opacity: 1, offset: 0.12 },
+        { opacity: 0, offset: 0.25 }, { opacity: 1, offset: 0.38 },
+        { opacity: 0, offset: 0.50 }, { opacity: 1, offset: 0.62 },
+        { opacity: 1, offset: 1 },
+      ],
+      { duration: 1200, fill: "forwards", easing: "ease" }
+    );
+  }, []);
+  return (
+    <g ref={ref}>
+      {shapes.map((s, i) =>
+        s.type === "ellipse"
+          ? <ellipse key={i} cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry} fill={s.fill || "none"} stroke={s.stroke || "none"} strokeWidth={s.sw || 1} />
+          : <path key={i} d={s.d} fill={s.fill || "none"} stroke={s.stroke || "none"} strokeWidth={s.sw || 1} />
+      )}
+    </g>
+  );
+}
 
-        .gc-btn-main {
-          padding: 14px 48px;
-          border-radius: 100px;
-          border: 1px solid rgba(200,80,100,0.5);
-          background: linear-gradient(135deg, rgba(200,80,100,0.25), rgba(150,50,70,0.15));
-          color: #fde0e5;
-          font-family: 'Cormorant Garamond', Georgia, serif;
-          font-size: 15px;
-          font-weight: 300;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          cursor: pointer;
-          transition: all 0.28s ease;
-        }
-        .gc-btn-main:hover {
-          background: linear-gradient(135deg, rgba(200,80,100,0.45), rgba(150,50,70,0.30));
-          box-shadow: 0 0 30px rgba(200,80,100,0.35);
-          border-color: rgba(220,120,130,0.7);
-        }
-        .gc-btn-stop {
-          background: rgba(255,255,255,0.04);
-          border-color: rgba(255,255,255,0.15);
-          color: rgba(240,220,220,0.6);
-        }
-        .gc-btn-stop:hover {
-          background: rgba(255,255,255,0.08);
-          box-shadow: none;
-        }
+export function FaceSVG({ zones, animKey }) {
+  const shapes = zones.flatMap((z) => ZONE_SHAPES[z] || []);
+  return (
+    <svg viewBox="0 0 360 400" width="100%" height="100%" style={{ display: "block", overflow: "visible" }}>
+      <defs>
+        <filter id="rglow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="5" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <path d={FACE_PATH} fill="#f0c898" stroke="#d4a870" strokeWidth="1.5" />
+      <ellipse cx="31" cy="196" rx="12" ry="22" fill="#e8b880" stroke="#d4a870" strokeWidth="1" />
+      <ellipse cx="329" cy="196" rx="12" ry="22" fill="#e8b880" stroke="#d4a870" strokeWidth="1" />
+      <ellipse cx="118" cy="162" rx="32" ry="13" fill="white" opacity="0.75" />
+      <ellipse cx="242" cy="162" rx="32" ry="13" fill="white" opacity="0.75" />
+      <circle cx="118" cy="162" r="9" fill="#3a2518" opacity="0.9" />
+      <circle cx="242" cy="162" r="9" fill="#3a2518" opacity="0.9" />
+      <circle cx="121" cy="159" r="2.5" fill="white" opacity="0.6" />
+      <circle cx="245" cy="159" r="2.5" fill="white" opacity="0.6" />
+      <path d="M86,130 Q108,120 142,126" fill="none" stroke="#3a2518" strokeWidth="2.5" strokeLinecap="round" opacity="0.55" />
+      <path d="M218,126 Q252,120 274,130" fill="none" stroke="#3a2518" strokeWidth="2.5" strokeLinecap="round" opacity="0.55" />
+      <path d="M172,196 Q168,218 158,228 Q168,235 180,235 Q192,235 202,228 Q192,218 188,196" fill="none" stroke="#c4906a" strokeWidth="1.2" opacity="0.45" />
+      <path d="M148,292 Q165,282 180,286 Q195,282 212,292 Q202,316 180,320 Q158,316 148,292Z" fill="#d08090" opacity="0.50" />
+      {shapes.length > 0 && (
+        <g key={animKey} filter="url(#rglow)">
+          <ZoneLayer shapes={shapes} />
+        </g>
+      )}
+    </svg>
+  );
+}
 
-        @keyframes pulse-ring {
-          0%   { opacity: 0.6; transform: scale(1); }
-          100% { opacity: 0;   transform: scale(1.35); }
-        }
-        .gc-live-dot {
-          width: 7px; height: 7px; border-radius: 50%;
-          background: #f87070; display: inline-block;
-          box-shadow: 0 0 8px #f87070;
-          animation: none;
-        }
-        .gc-live-dot.active { animation: pulse-ring 1.4s ease-out infinite; }
+// ─── Main GlamCamAR page (unchanged behaviour) ───────────────────────────────
+function GlamCamAR() {
+  const [stepIdx, setStepIdx] = useState(0);
+  const [customText, setCustomText] = useState("");
+  const [customMode, setCustomMode] = useState(false);
+  const [animKey, setAnimKey] = useState(0);
+  const [tutorial, setTutorial] = useState(null);
+  const location = useLocation();
+  const preferences = location.state;
 
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .gc-animate-in { animation: fadeIn 0.4s ease forwards; }
-      `}</style>
+  const goStep = (i) => { setStepIdx(i); setAnimKey(k => k + 1); };
+  const goCustom = () => { setCustomMode(v => !v); setAnimKey(k => k + 1); };
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <p style={{
-          fontFamily: "'DM Mono', monospace",
-          fontSize: 10,
-          letterSpacing: "0.35em",
-          color: "rgba(200,130,110,0.55)",
-          textTransform: "uppercase",
-          margin: "0 0 10px",
-        }}>
-          The Glam Cam · AR Mirror
-        </p>
-        <h1 style={{
-          fontSize: "clamp(28px, 5vw, 46px)",
-          fontWeight: 300,
-          fontStyle: "italic",
-          color: "rgba(250,230,220,0.92)",
-          margin: 0,
-          letterSpacing: "0.04em",
-          lineHeight: 1.1,
-        }}>
-          Your face. Your guide.
-        </h1>
+  const instruction = customMode ? customText : tutorial?.steps?.[stepIdx] || "";
+  const zones = parseZones(instruction);
+
+  useEffect(() => {
+    async function loadTutorial() {
+      if (!preferences) return;
+      try {
+        const res = await fetch(
+          `http://localhost:8000/get_tutorial?face_shape=${preferences.faceShape}&makeup_style=${preferences.makeupType}&hair_style=${preferences.hairstyle}`
+        );
+        const data = await res.json();
+        if (data.steps) { setTutorial(data); setStepIdx(0); }
+      } catch (err) {
+        console.error("Tutorial fetch error:", err);
+      }
+    }
+    loadTutorial();
+  }, []);
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="logo">Glam<span>Cam</span></div>
+        <div className="badge">AR Preview</div>
       </div>
-
-      {/* ── Mirror viewport ────────────────────────────────────────────────── */}
-      <div className="gc-mirror-frame" style={{ width: "min(560px, 90vw)", aspectRatio: "3/4" }}>
-        {/* Video */}
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            transform: "scaleX(-1)",
-            display: "block",
-            background: "#0d0810",
-          }}
-        />
-
-        {/* AR canvas overlay */}
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-          }}
-        />
-
-        {/* Idle overlay */}
-        {!isActive && (
-          <div style={{
-            position: "absolute", inset: 0,
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            background: "rgba(10,6,8,0.75)",
-            backdropFilter: "blur(4px)",
-          }}>
-            <div style={{ fontSize: 42, marginBottom: 12, opacity: 0.5 }}>◉</div>
-            <p style={{
-              color: "rgba(240,210,200,0.5)",
-              fontStyle: "italic",
-              fontSize: 15,
-              margin: 0,
-            }}>
-              Camera inactive
-            </p>
-          </div>
-        )}
-
-        {/* Face-not-found nudge */}
-        {isActive && !faceFound && (
-          <div className="gc-animate-in" style={{
-            position: "absolute",
-            bottom: 20, left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0,0,0,0.65)",
-            backdropFilter: "blur(8px)",
-            borderRadius: 100,
-            padding: "8px 20px",
-            border: "1px solid rgba(255,200,180,0.15)",
-          }}>
-            <p style={{
-              color: "rgba(255,220,200,0.75)",
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 11,
-              letterSpacing: "0.1em",
-              margin: 0,
-            }}>
-              Position your face in the frame
-            </p>
-          </div>
-        )}
-
-        {/* Live indicator */}
-        {isActive && (
-          <div style={{
-            position: "absolute", top: 16, right: 20,
-            display: "flex", alignItems: "center", gap: 7,
-          }}>
-            <span className={`gc-live-dot${faceFound ? " active" : ""}`} />
-            <span style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10, letterSpacing: "0.2em",
-              color: faceFound ? "rgba(255,160,140,0.85)" : "rgba(255,255,255,0.25)",
-              textTransform: "uppercase",
-            }}>
-              {faceFound ? "Live" : "Scanning"}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Controls ───────────────────────────────────────────────────────── */}
-      <div style={{ marginTop: 28, width: "min(560px, 90vw)" }}>
-
-        {/* Step pills */}
-        {isActive && (
-          <div className="gc-animate-in" style={{ marginBottom: 20 }}>
-            <p style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10, letterSpacing: "0.25em",
-              color: "rgba(200,150,130,0.5)",
-              textTransform: "uppercase",
-              margin: "0 0 10px",
-            }}>
-              Makeup Zone
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {STEPS.map(step => (
-                <button
-                  key={String(step.key)}
-                  className={`gc-step-pill${activeStep === step.key ? " active" : ""}`}
-                  onClick={() => setActiveStep(step.key)}
-                >
-                  <span>{step.icon}</span>
-                  <span>{step.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Step tip */}
-            <div style={{
-              marginTop: 12,
-              padding: "10px 16px",
-              borderRadius: 10,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(210,170,130,0.1)",
-            }}>
-              <p style={{
-                color: "rgba(235,200,185,0.7)",
-                fontStyle: "italic",
-                fontSize: 13,
-                margin: 0,
-                lineHeight: 1.55,
-              }}>
-                💡 {currentStep.tip}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Face shape selector */}
-        {isActive && (
-          <div className="gc-animate-in" style={{ marginBottom: 24 }}>
-            <p style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10, letterSpacing: "0.25em",
-              color: "rgba(200,150,130,0.5)",
-              textTransform: "uppercase",
-              margin: "0 0 10px",
-            }}>
-              Face Shape
-            </p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {FACE_SHAPES.map(shape => (
-                <button
-                  key={shape}
-                  className={`gc-shape-pill${faceShape === shape ? " active" : ""}`}
-                  onClick={() => setFaceShape(shape)}
-                >
-                  {shape}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Error */}
-        {status === "error" && (
-          <div style={{
-            marginBottom: 16, padding: "10px 16px",
-            borderRadius: 10,
-            background: "rgba(200,50,50,0.12)",
-            border: "1px solid rgba(200,80,80,0.3)",
-          }}>
-            <p style={{ color: "#f87070", fontFamily: "'DM Mono', monospace", fontSize: 12, margin: 0 }}>
-              ⚠ {errorMsg}
-            </p>
-          </div>
-        )}
-
-        {/* Start / Stop */}
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          {!isActive ? (
-            <button
-              className="gc-btn-main"
-              onClick={startAR}
-              disabled={status === "loading"}
-            >
-              {status === "loading" ? "Opening camera…" : "Begin Session"}
+      <div className="body">
+        <div className="sidebar">
+          <div className="sidebar-title">Tutorials</div>
+          {tutorial && (
+            <button className={`tut-btn ${!customMode ? "active" : ""}`}>
+              <div className="tut-name">{tutorial.face_shape}</div>
+              <div className="tut-count">{tutorial.total_steps} steps</div>
             </button>
+          )}
+          <div className="divider" />
+          <button className={`custom-toggle ${customMode ? "active" : ""}`} onClick={goCustom}>
+            ✏️ Try your own instruction
+          </button>
+        </div>
+
+        <div className="centre">
+          <div className="ar-live"><div className="ar-dot" /> AR Overlay Preview</div>
+          <div className="ar-frame">
+            <div className="br" />
+            <FaceSVG zones={zones} animKey={animKey} />
+          </div>
+          <div className="zone-pills">
+            {zones.length === 0
+              ? <span className="no-zones">No zones detected</span>
+              : zones.map(z => <span key={z} className="pill">{ZONE_META[z] || z}</span>)
+            }
+          </div>
+          {instruction && <div className="instruction-quote">"{instruction}"</div>}
+        </div>
+
+        <div className="right-panel">
+          <div className="rp-header">
+            <div className="rp-title">{customMode ? "Custom Instruction" : tutorial?.label}</div>
+            <div className="rp-sub">{customMode ? "Type any instruction below" : `Step ${stepIdx + 1} of ${tutorial?.steps?.length || 0}`}</div>
+          </div>
+          {customMode ? (
+            <div className="custom-area">
+              <label className="custom-label">Instruction text</label>
+              <textarea className="custom-input" value={customText}
+                onChange={e => { setCustomText(e.target.value); setAnimKey(k => k + 1); }}
+                placeholder="e.g. blend along the jawline from ear to chin" />
+              <div className="hint-wrap">
+                <div className="custom-hint">Anatomical zone keywords:</div>
+                <div className="hint-tags">
+                  {["jawline", "chin", "cheekbone", "apple of cheek", "cheek", "temple", "forehead",
+                    "hairline", "nose bridge", "sides of nose", "nose tip", "brow bone", "eyebrow", "brow",
+                    "socket line", "crease", "upper lid", "lid", "inner corner", "outer v",
+                    "lash line", "lashes", "eyeliner", "wing", "top lip", "lower lip", "lips"].map(k => (
+                      <span key={k} className="hint-tag">{k}</span>
+                    ))}
+                </div>
+              </div>
+            </div>
           ) : (
-            <button className="gc-btn-main gc-btn-stop" onClick={stopAR}>
-              End Session
-            </button>
+            <div className="steps-list">
+              {tutorial?.steps?.map((s, i) => (
+                <div key={i} className={`step-row ${i === stepIdx ? "active" : ""}`} onClick={() => goStep(i)}>
+                  <div className="step-num">{i + 1}</div>
+                  <div className="step-text">{s}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!customMode && (
+            <div className="nav-area">
+              <button className="nav-btn" onClick={() => goStep(stepIdx - 1)} disabled={stepIdx === 0}>← Back</button>
+              <button className="nav-btn primary" onClick={() => goStep(stepIdx + 1)} disabled={stepIdx === tutorial?.steps?.length - 1}>Next →</button>
+            </div>
           )}
         </div>
       </div>
-
-      {/* ── Footer note ────────────────────────────────────────────────────── */}
-      <p style={{
-        marginTop: 32,
-        fontFamily: "'DM Mono', monospace",
-        fontSize: 10,
-        letterSpacing: "0.12em",
-        color: "rgba(180,140,130,0.3)",
-        textAlign: "center",
-      }}>
-        All processing is local · No images leave your device
-      </p>
     </div>
   );
 }
+
+export default GlamCamAR;

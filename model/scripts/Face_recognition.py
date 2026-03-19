@@ -8,26 +8,21 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 import mediapipe as mp
 from pathlib import Path
-# ======================
+ 
 # CONFIG
-# ======================
-
 IMG_SIZE = 224
 NUM_CLASSES = 5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# ======================
+ 
 # LOAD CLASS NAMES
-# ======================
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
 with open(MODELS_DIR/ "class_names.json", "r") as f:
     CLASS_NAMES = json.load(f)
 
-# ======================
-# MEDIAPIPE (LAZY INIT)
-# ======================
-
+ 
+# MEDIAPIPE
 def get_face_mesh():
     return mp.solutions.face_mesh.FaceMesh(
         static_image_mode=True,
@@ -35,10 +30,8 @@ def get_face_mesh():
         refine_landmarks=True
     )
 
-# ======================
+ 
 # GEOMETRY
-# ======================
-
 def dist(a, b):
     return math.dist(a, b)
 
@@ -69,10 +62,8 @@ def extract_landmarks(image, face_mesh):
         dtype=np.float32
     )
 
-# ======================
+ 
 # TRANSFORMS
-# ======================
-
 transform = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ToTensor(),
@@ -82,10 +73,8 @@ transform = transforms.Compose([
     )
 ])
 
-# ======================
+ 
 # MODEL
-# ======================
-
 class CNNBackbone(nn.Module):
     def __init__(self):
         super().__init__()
@@ -117,10 +106,8 @@ class Hybrid_Model(nn.Module):
         fused = torch.cat((cnn_feat, geom_feat), dim=1)
         return self.classifier(fused)
 
-# ======================
+ 
 # LOAD MODEL
-# ======================
-
 def load_model(weights_path= MODELS_DIR/"face_shape.pt"):
     model = Hybrid_Model()
     model.load_state_dict(torch.load(weights_path, map_location=DEVICE))
@@ -130,10 +117,8 @@ def load_model(weights_path= MODELS_DIR/"face_shape.pt"):
 
 MODEL = load_model()
 
-# ======================
+ 
 # PREDICTION
-# ======================
-
 def predict(image_bytes: bytes):
     face_mesh = get_face_mesh()
 

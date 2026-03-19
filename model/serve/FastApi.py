@@ -2,12 +2,10 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from model.scripts.Face_recognition import predict
 from model.serve.database import fetch_tutorial
 from fastapi.middleware.cors import CORSMiddleware
-from model.serve.AR_makeup_route import ar_bp
 
 
 app = FastAPI(title="Face Shape Classification API")
 
-app.include_router(ar_bp, prefix="/api/ar")
 
 app.add_middleware(
     CORSMiddleware,
