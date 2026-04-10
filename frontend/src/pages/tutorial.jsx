@@ -11,6 +11,9 @@ function Tutorial() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [animKey, setAnimKey] = useState(0);
+  const [weather, setWeather] = useState(null);
+  const [time, setTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
 
 
   useEffect(() => {
@@ -39,7 +42,7 @@ function Tutorial() {
   const zones = parseZones(tutorial?.steps?.[stepIndex] ?? "");
 
   const nextStep = () => {
-    if (stepIndex < tutorial.steps.length - 1) {
+    if (stepIndex < (tutorial?.steps?.length ?? 0) - 1) {
       setDirection("next");
       setStepIndex((i) => i + 1);
     }
@@ -51,6 +54,70 @@ function Tutorial() {
       setStepIndex((i) => i - 1);
     }
   };
+
+
+
+
+  //Weather & Date widget
+  useEffect(() => {
+    const tick = setInterval(() => setTime(new Date()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current=temperature_2m,weathercode&timezone=auto`
+          );
+
+          const wmoIcon = (code) => {
+            if (code === 0) return "☀️";
+            if (code <= 3) return "⛅";
+            if (code <= 48) return "🌫️";
+            if (code <= 67) return "🌧️";
+            if (code <= 77) return "❄️";
+            if (code <= 99) return "⛈️";
+            return "❓";
+          };
+
+          const wmoDesc = (code) => {
+            if (code === 0) return "Clear sky";
+            if (code <= 3) return "Partly cloudy";
+            if (code <= 48) return "Foggy";
+            if (code <= 67) return "Rain";
+            if (code <= 77) return "Snow";
+            if (code <= 99) return "Storm";
+            return "Unknown";
+          };
+          const data = await res.json();
+          const code = data.current.weathercode;
+          setWeather({
+            temp: Math.round(data.current.temperature_2m),
+            icon: wmoIcon(code),
+            desc: wmoDesc(code),
+          });
+        } catch {
+          // silently fail
+        } finally {
+          setLoading(false);
+        }
+      },
+      () => setLoading(false)
+    );
+  }, []);
+
+  const dateStr = time.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const timeStr = time.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   if (!tutorial) return <div>No tutorial selected.</div>;
 
@@ -64,10 +131,10 @@ function Tutorial() {
           {/* Video — mirrored so it feels like a real mirror */}
           <video
             ref={videoRef}
+            
             autoPlay
             playsInline
             className="w-full h-full object-cover"
-            style={{ transform: "scaleX(-1)" }}
           />
 
           <div
@@ -131,7 +198,24 @@ function Tutorial() {
             </button>
           </div>
 
-        </div>
+            <div className="absolute top-6 right-8 text-right bg-black/80 backdrop-blur-md px-5 py-4 rounded-2xl min-w-[180px] shadow-lg">
+              <div className="text-lg font-semibold text-white">
+                {dateStr}
+              </div>
+           
+            <div className="text-3xl font-bold text-white">
+              {timeStr}
+            </div>
+
+            <div className="mt-2 text-md text-white">
+              {loading
+                ? "Loading weather..."
+                : weather
+                  ? `${weather.icon} ${weather.temp}°C — ${weather.desc}`
+                  : "Weather unavailable"}
+            </div>
+             </div>
+          </div>
       </div>
     </div>
   );

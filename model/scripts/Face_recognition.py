@@ -62,6 +62,53 @@ def extract_landmarks(image, face_mesh):
         dtype=np.float32
     )
 
+def is_valid_face(image, face_mesh, min_detection_confidence=0.7):
+    """
+    Returns (is_valid, landmarks) tuple.
+    Uses MediaPipe's face detection score + a basic landmark sanity check.
+    """
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    result = face_mesh.process(img_rgb)
+
+    if not result.multi_face_landmarks:
+        return False, None
+
+    landmarks = np.array(
+        [[lm.x, lm.y, lm.z] for lm in result.multi_face_landmarks[0].landmark],
+        dtype=np.float32
+    )
+
+
+    xy = landmarks[:, :2]
+    if np.any(xy < -0.1) or np.any(xy > 1.1):
+        return False, None
+
+   
+   
+    nose_tip = landmarks[1]       # nose tip
+    left_eye = landmarks[33]      # left eye outer corner
+    right_eye = landmarks[263]    # right eye outer corner
+    chin = landmarks[152]         # chin
+
+    eye_center_y = (left_eye[1] + right_eye[1]) / 2
+    face_height = abs(chin[1] - eye_center_y)
+
+    # Nose should be below eyes
+    if nose_tip[1] <= eye_center_y:
+        return False, None
+
+    # Face height should be non-trivial
+    if face_height < 0.05:
+        return False, None
+
+    eye_dy = abs(left_eye[1] - right_eye[1])
+    eye_dx = abs(left_eye[0] - right_eye[0])
+    if eye_dx > 0 and (eye_dy / eye_dx) > 0.3:  
+        return False, None
+
+    return True, landmarks[:, :2] 
+
+
  
 # TRANSFORMS
 transform = transforms.Compose([
@@ -130,7 +177,15 @@ def predict(image_bytes: bytes):
 
     image = cv2.resize(image, (IMG_SIZE, IMG_SIZE))
 
-    landmarks = extract_landmarks(image, face_mesh)
+    valid, landmarks = is_valid_face(image, face_mesh)
+
+    if not valid:
+        return {
+            "face_shape": None,
+            "confidence": 0.0,
+            "error": "No valid face detected in the image"
+        }
+
     geom = geometry_features(landmarks)
 
     image_tensor = transform(image).unsqueeze(0).to(DEVICE)
@@ -138,9 +193,22 @@ def predict(image_bytes: bytes):
 
     with torch.no_grad():
         outputs = MODEL(image_tensor, geom_tensor)
-        pred_idx = torch.argmax(outputs, dim=1).item()
+        probs = torch.softmax(outputs, dim=1)[0]
+        pred_idx = torch.argmax(probs).item()
+        confidence = float(probs[pred_idx])
+
+    # Two-tier threshold:
+    # - Below 0.3 → reject outright
+    # - 0.3 to 0.5 → return result but flag as low confidence
+    if confidence < 0.3:
+        return {
+            "face_shape": None,
+            "confidence": confidence,
+            "error": "Low confidence prediction — face may be unclear or partially visible"
+        }
 
     return {
         "face_shape": CLASS_NAMES[pred_idx],
-        "confidence": float(torch.softmax(outputs, dim=1)[0][pred_idx])
+        "confidence": confidence,
+        "low_confidence": confidence < 0.5  # flag it but still return a result
     }

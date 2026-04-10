@@ -58,20 +58,35 @@ function FaceCapture() {
 
         const data = await res.json();
         console.log("FULL respons:", data);
+
+        //  Handle no face detected
+        if (!data.face_shape) {
+          hasCaptured.current = false; // allow retry
+          alert(data.error || "No face detected. Please try again.");
+          captureAndSend(); // retry automatically
+          return;
+        }
+
         setPrediction(data);
         setShowResultScreen(true);
 
         // Fetch tutorial after prediction
-        const tutorialRes = await fetch(
-          `http://localhost:8000/get_tutorial?face_shape=${data.face_shape}&makeup_style=${preferences.makeupType}&hair_style=${preferences.hairstyle}`
-        );
-
+        const params = new URLSearchParams();
+        params.append("face_shape", data.face_shape); // from the ML prediction
+        if (preferences.makeup_style) params.append("makeup_style", preferences.makeup_style);
+        if (preferences.hair_style) params.append("hair_style", preferences.hair_style);
+        if (preferences.occasion) params.append("occasion", preferences.occasion);
+        if (preferences.skill_level) params.append("skill_level", preferences.skill_level);
+       
+        const tutorialRes = await fetch(`http://localhost:8000/get_tutorial?${params.toString()}`);
 
         const tutorialData = await tutorialRes.json();
         setTutorial(tutorialData);
 
-        console.log("Tutorial:", tutorialData);
 
+        console.log("Tutorial data:", JSON.stringify(tutorialData)); // log the full object
+        console.log("Steps:", tutorialData.steps);
+        console.log("Tutorial:", tutorialData);
       } catch (err) {
         console.error("Error:", err);
       }
@@ -99,14 +114,21 @@ function FaceCapture() {
 
     if (!tutorial) return;
 
-    navigate("/LoadingPage", {
-      state: {
-        tutorial: tutorial
-      }
-    });
-
   };
 
+useEffect(() => {
+  if (prediction && tutorial) {
+    setTimeout(() => {
+      navigate("/LoadingPage", {
+        state: {
+          prediction: prediction,
+          tutorial: tutorial,
+          preferences: preferences
+        }
+      });
+    }, 1500); // small delay so user sees result
+  }
+}, [prediction, tutorial, navigate]);
 
   return (
     <div className="w-screen h-screen flex items-center justify-center bg-white">
@@ -145,26 +167,7 @@ function FaceCapture() {
             Your face shape is {prediction.face_shape}
           </h1>
 
-          <p className="text-lg mb-10 text-center px-10">
-            I have multiple looks that I think will suit you.
-            Would you like me to choose one randomly,
-            or do you want to choose it yourself?
-          </p>
 
-          <div className="flex gap-6">
-            <button
-              onClick={chooseRandomLook}
-              className="bg-purple-500 px-6 py-3 rounded-xl"
-            >
-              Choose Random Look
-            </button>
-
-            <button
-              className="bg-gray-500 px-6 py-3 rounded-xl"
-            >
-              Choose Myself
-            </button>
-          </div>
         </div>
       )}
 

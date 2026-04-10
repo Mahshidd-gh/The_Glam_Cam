@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 
-// ─── Colours ───────────────────────────────────────────────────────────────
+//  Colours 
 const R = "rgba(220,30,30,";
 const RS = "rgba(255,60,60,";
 
-// ─── Keyword helpers ────────────────────────────────────────────────────────
+//  Keyword helpers 
 function matchesKeyword(text, keyword) {
   const esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![a-z])${esc}(?![a-z])`, "i").test(text);
@@ -64,7 +64,7 @@ export const ZONE_META = {
   lip_top: "Top Lip", lip_bottom: "Lower Lip",
 };
 
-// ─── MediaPipe landmark indices for each zone ───────────────────────────────
+//  MediaPipe landmark indices for each zone 
 // These map zone names → arrays of landmark point indices from FaceMesh's 468-point model
 const ZONE_LANDMARKS = {
   full_face: [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109],
@@ -93,11 +93,12 @@ const ZONE_LANDMARKS = {
 };
 
 
-function lmPx(lm, idx, w, h, mirrored = true) {
+function lmPx(lm, idx, w, h) {
   const p = lm[idx];
   if (!p) return null;
+
   return {
-    x: mirrored ? (1 - p.x) * w : p.x * w,
+    x: p.x * w,
     y: p.y * h,
   };
 }
@@ -147,10 +148,10 @@ function drawZone(ctx, zone, lm, w, h) {
 
   } else if (["brows", "eye_socket", "eye_crease", "lash_line", "eyeliner"].includes(zone)) {
     // split left/right eye roughly at centre
-    const midX = w / 2;
-    const left = pts.filter(p => p.x > midX); // mirrored: left face = higher x
-    const right = pts.filter(p => p.x <= midX);
-
+    const faceCenterX =
+      pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
+    const left = pts.filter(p => p.x > faceCenterX);
+    const right = pts.filter(p => p.x <= faceCenterX);
     [left, right].forEach(side => {
       if (side.length < 2) return;
       const sorted = [...side].sort((a, b) => a.x - b.x);
@@ -208,7 +209,7 @@ function convexHull(points) {
   return lower.concat(upper);
 }
 
-// ─── Flash animation state ──────────────────────────────────────────────────
+//  Flash animation state 
 // We track when animKey last changed and produce a 0-1 opacity multiplier
 function flashOpacity(startTime) {
   const t = (Date.now() - startTime) / 1200; // 1200ms like the original
@@ -224,7 +225,7 @@ function flashOpacity(startTime) {
   return 1;
 }
 
-// ─── ZoneOverlay: canvas overlay with face tracking ─────────────────────────
+//  ZoneOverlay: canvas overlay with face tracking 
 export function ZoneOverlay({ zones, animKey, videoRef }) {
   const canvasRef = useRef(null);
   const faceMeshRef = useRef(null);
@@ -232,70 +233,69 @@ export function ZoneOverlay({ zones, animKey, videoRef }) {
   const latestLandmarks = useRef(null);
   const animStartRef = useRef(Date.now());
 
-  // Track when animKey changes to restart flash
   useEffect(() => {
     animStartRef.current = Date.now();
   }, [animKey]);
 
-  // Load MediaPipe FaceMesh once
+  //  Load MediaPipe 
   useEffect(() => {
     let destroyed = false;
 
-    async function loadMediaPipe() {
-      // Dynamically load scripts if not already present
+    async function load() {
       await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
       await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js");
 
       if (destroyed) return;
 
-      const faceMesh = new window.FaceMesh({
+      const fm = new window.FaceMesh({
         locateFile: (file) =>
           `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
       });
 
-      faceMesh.setOptions({
+      fm.setOptions({
         maxNumFaces: 1,
         refineLandmarks: true,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5,
       });
 
-      faceMesh.onResults((results) => {
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-          latestLandmarks.current = results.multiFaceLandmarks[0];
+      fm.onResults((res) => {
+        if (res.multiFaceLandmarks?.length) {
+          latestLandmarks.current = res.multiFaceLandmarks[0];
         } else {
           latestLandmarks.current = null;
         }
       });
 
-      faceMeshRef.current = faceMesh;
+      faceMeshRef.current = fm;
     }
 
-    loadMediaPipe().catch(console.error);
+    load();
 
     return () => {
       destroyed = true;
-      if (faceMeshRef.current) {
-        faceMeshRef.current.close();
-        faceMeshRef.current = null;
-      }
+      faceMeshRef.current?.close();
     };
   }, []);
 
-  // Per-frame render loop
+  //  Render Loop (SMOOTH, NO FRAME SKIP) 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    let frameCount = 0;
-
     async function loop() {
       const video = videoRef?.current;
-      const faceMesh = faceMeshRef.current;
+      const fm = faceMeshRef.current;
       const ctx = canvas.getContext("2d");
 
-      // Sync canvas size to its display size
-      const { offsetWidth: w, offsetHeight: h } = canvas;
+      if (!video || !video.videoWidth) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -303,19 +303,19 @@ export function ZoneOverlay({ zones, animKey, videoRef }) {
 
       ctx.clearRect(0, 0, w, h);
 
-      // Send every 2nd frame to FaceMesh (saves CPU, still smooth)
-      if (faceMesh && video && video.readyState >= 2) {
-        frameCount++;
-        if (frameCount % 2 === 0) {
-          await faceMesh.send({ image: video });
-        }
+      // ALWAYS process frame (fixes lag)
+      if (fm && video.readyState >= 2) {
+        await fm.send({ image: video });
       }
 
       const lm = latestLandmarks.current;
+
       if (lm && zones.length > 0) {
         const opacity = flashOpacity(animStartRef.current);
         ctx.globalAlpha = opacity;
-        zones.forEach(zone => drawZone(ctx, zone, lm, w, h));
+
+        zones.forEach((z) => drawZone(ctx, z, lm, w, h));
+
         ctx.globalAlpha = 1;
       }
 
@@ -323,9 +323,8 @@ export function ZoneOverlay({ zones, animKey, videoRef }) {
     }
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+
+    return () => cancelAnimationFrame(rafRef.current);
   }, [zones, videoRef]);
 
   return (
@@ -355,7 +354,7 @@ function loadScript(src) {
   });
 }
 
-// ─── FaceSVG (unchanged — used in GlamCamAR preview page) ───────────────────
+//  FaceSVG (unchanged — used in GlamCamAR preview page) 
 const FACE_PATH = "M100,55 C155,38 205,38 260,55 C318,82 330,145 328,198 C323,272 296,328 235,350 C200,362 160,362 125,350 C64,328 37,272 32,198 C30,145 42,82 100,55Z";
 
 const ZONE_SHAPES = {
@@ -502,7 +501,7 @@ export function FaceSVG({ zones, animKey }) {
   );
 }
 
-// ─── Main GlamCamAR page (unchanged behaviour) ───────────────────────────────
+//  Main GlamCamAR page
 function GlamCamAR() {
   const [stepIdx, setStepIdx] = useState(0);
   const [customText, setCustomText] = useState("");
@@ -522,9 +521,15 @@ function GlamCamAR() {
     async function loadTutorial() {
       if (!preferences) return;
       try {
-        const res = await fetch(
-          `http://localhost:8000/get_tutorial?face_shape=${preferences.faceShape}&makeup_style=${preferences.makeupType}&hair_style=${preferences.hairstyle}`
-        );
+        const params = new URLSearchParams();
+        if (preferences.faceShape) params.append("face_shape", preferences.faceShape);
+        if (preferences.makeup_style) params.append("makeup_style", preferences.makeup_style);
+        if (preferences.hair_style) params.append("hair_style", preferences.hair_style);
+        if (preferences.occasion) params.append("occasion", preferences.occasion);
+        if (preferences.skill_level) params.append("skill_level", preferences.skill_level);
+
+
+        const res = await fetch(`http://localhost:8000/get_tutorial?${params.toString()}`);
         const data = await res.json();
         if (data.steps) { setTutorial(data); setStepIdx(0); }
       } catch (err) {

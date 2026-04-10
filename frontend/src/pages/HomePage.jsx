@@ -29,31 +29,6 @@ export default function HomePage() {
           💄 Choose Your Makeup
         </button>
 
-        
-
-        {/* Bottom actions */}
-        <div className="flex justify-between gap-2 pt-2">
-          <button
-            onClick={() => navigate("/Settings")}
-            className="flex-1 py-2 rounded-lg bg-pink-500 text-sm hover:bg-purple-600 transition"
-          >
-            ⚙️ Settings
-          </button>
-
-          {/* <button
-            onClick={() => navigate("/MirrorSetting")}
-            className="flex-1 py-2 rounded-lg bg-gray-100 text-sm hover:bg-gray-200"
-          >
-            🪞 Mirror
-          </button> */}
-
-          <button
-            onClick={() => navigate("/History")}
-            className="flex-1 py-2 rounded-lg bg-pink-500 text-sm hover:bg-purple-600 transition"
-          >
-            🕘 History
-          </button>
-        </div>
 
         {/* Footer */}
         <p className="text-xs text-gray-400 pt-2">

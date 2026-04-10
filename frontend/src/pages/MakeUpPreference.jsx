@@ -84,38 +84,6 @@ console.log (formData);
           </div>
         </section>
 
-        {/* Time Slider */}
-        <section>
-          <h2 className="font-semibold text-gray-700 mb-2">
-            ⏱ Time Available: {formData.time} min
-          </h2>
-          <input
-            type="range"
-            min="5"
-            max="30"
-            step="5"
-            value={formData.time}
-            onChange={(e) =>
-              setFormData({ ...formData, time: e.target.value })
-            }
-            className="w-full accent-pink-500"
-          />
-        </section>
-
-        {/* Save / Compare */}
-        <section className="flex items-center justify-between">
-          <span className="font-semibold text-gray-700">
-            💾 Save this look
-          </span>
-          <input
-            type="checkbox"
-            checked={formData.saveLook}
-            onChange={() =>
-              setFormData({ ...formData, saveLook: !formData.saveLook })
-            }
-            className="w-5 h-5 accent-pink-500"
-          />
-        </section>
 
         {/* Start Button */}
         <button

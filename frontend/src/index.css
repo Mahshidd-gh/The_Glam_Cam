@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Outfit:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap');
 
 *,
 *::before,
@@ -10,7 +10,7 @@
 
 body {
   background: #f7f0eb;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   min-height: 100vh
 }
 
@@ -29,7 +29,7 @@ body {
 }
 
 .logo {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.4rem;
   color: #f5e0d0;
   letter-spacing: .06em
@@ -237,7 +237,7 @@ body {
   color: #6a4030;
   font-style: italic;
   line-height: 1.65;
-  font-family: 'Playfair Display', serif
+ font-family: 'Cormorant Garamond', serif;
 }
 
 .right-panel {
@@ -254,7 +254,7 @@ body {
 }
 
 .rp-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1rem;
   color: #2a1508
 }
