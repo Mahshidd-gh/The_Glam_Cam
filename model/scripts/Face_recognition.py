@@ -176,7 +176,6 @@ def predict(image_bytes: bytes):
         raise ValueError("Invalid image")
 
     image = cv2.resize(image, (IMG_SIZE, IMG_SIZE))
-
     valid, landmarks = is_valid_face(image, face_mesh)
 
     if not valid:
